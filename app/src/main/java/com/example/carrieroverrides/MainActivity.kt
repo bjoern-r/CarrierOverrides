@@ -3,8 +3,10 @@ package com.example.carrieroverrides
 import android.Manifest
 import android.annotation.SuppressLint
 import android.content.pm.PackageManager
+import android.graphics.Color
 import android.graphics.Typeface
 import android.os.Bundle
+import android.os.UserManager
 import android.telephony.CarrierConfigManager
 import android.telephony.SubscriptionInfo
 import android.telephony.SubscriptionManager
@@ -138,6 +140,23 @@ class MainActivity : ComponentActivity() {
             .createForSubscriptionId(selectedSubId)
         val hasPrivileges = tm.hasCarrierPrivileges()
 
+        // The telephony stack binds CarrierServices only in the system user (user 0). Settings
+        // saved from a secondary user / work profile land in that user's storage and are never
+        // seen by the service, so block editing there.
+        val isSystemUser = getSystemService(UserManager::class.java).isSystemUser
+        if (!isSystemUser) {
+            contentContainer.addView(TextView(this).apply {
+                text = "WARNING: This app is running in a secondary user or work profile. " +
+                    "Android only loads carrier config from the main user, so changes made here " +
+                    "have no effect. Open the app from the main profile instead."
+                textSize = 14f
+                setTextColor(Color.RED)
+                setTypeface(null, Typeface.BOLD)
+                setPadding(0, 24, 0, 0)
+            })
+        }
+        val controlsEnabled = hasPrivileges && isSystemUser
+
         contentContainer.addView(TextView(this).apply {
             text = if (hasPrivileges) {
                 "Status: UICC Carrier Privileges GRANTED"
@@ -169,7 +188,7 @@ class MainActivity : ComponentActivity() {
 
             val current = CarrierConfigStore.getState(this, selectedSubId, key)
             val spinner = Spinner(this).apply {
-                isEnabled = hasPrivileges
+                isEnabled = controlsEnabled
                 adapter = ArrayAdapter(
                     this@MainActivity,
                     android.R.layout.simple_spinner_dropdown_item,
@@ -198,7 +217,7 @@ class MainActivity : ComponentActivity() {
         // Reset Button
         contentContainer.addView(Button(this).apply {
             text = "Reset All Overrides for Selected SIM"
-            isEnabled = hasPrivileges
+            isEnabled = controlsEnabled
             setOnClickListener {
                 CarrierConfigStore.resetAll(this@MainActivity, selectedSubId)
                 carrierConfigManager.notifyConfigChangedForSubId(selectedSubId)

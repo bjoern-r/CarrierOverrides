@@ -89,9 +89,12 @@ object CarrierConfigStore {
         val nsa = getState(context, subId, "nr_nsa")
         val sa = getState(context, subId, "nr_sa")
         if (nsa != TriState.DEFAULT || sa != TriState.DEFAULT) {
+            // NSA and SA share one array key, so overriding either one forces us to emit both.
+            // A DEFAULT component keeps the AOSP baseline (both NSA and SA available) instead of
+            // being silently dropped; only an explicit DISABLED removes it.
             val modes = mutableListOf<Int>()
-            if (nsa == TriState.ENABLED) modes.add(CarrierConfigManager.CARRIER_NR_AVAILABILITY_NSA)
-            if (sa == TriState.ENABLED) modes.add(CarrierConfigManager.CARRIER_NR_AVAILABILITY_SA)
+            if (nsa != TriState.DISABLED) modes.add(CarrierConfigManager.CARRIER_NR_AVAILABILITY_NSA)
+            if (sa != TriState.DISABLED) modes.add(CarrierConfigManager.CARRIER_NR_AVAILABILITY_SA)
             bundle.putIntArray(
                 CarrierConfigManager.KEY_CARRIER_NR_AVAILABILITIES_INT_ARRAY,
                 modes.toIntArray()
