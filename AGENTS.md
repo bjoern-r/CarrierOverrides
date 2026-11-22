@@ -61,3 +61,14 @@ CarrierOverrides/
 
 5. **Minimal Footprint:**
    * Keep UI code lightweight (native Android Views in `MainActivity.kt` without Jetpack Compose or heavy Material dependencies) so the APK stays small, fast to build, and easy to audit.
+
+---
+
+## 5. Git Commit Rules
+* **Never push.** Only create local commits; the maintainer pushes manually.
+* **Author identity:** `Bjoern <bjoern.c3@nixda.biz>` (already set in the repo's local git config). The shell environment may export `GIT_AUTHOR_NAME` / `GIT_AUTHOR_EMAIL` (and possibly `GIT_COMMITTER_*`), which override the git config. Always unset them when committing:
+  ```sh
+  env -u GIT_AUTHOR_NAME -u GIT_AUTHOR_EMAIL -u GIT_COMMITTER_NAME -u GIT_COMMITTER_EMAIL git commit ...
+  ```
+* **Co-author trailer:** end every commit message with
+  `Co-Authored-By: LLM <noreply@example.com>`
