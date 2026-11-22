@@ -225,6 +225,50 @@ class MainActivity : ComponentActivity() {
                 renderUi()
             }
         })
+
+        renderDiagnostics(subs.first { it.subscriptionId == selectedSubId })
+    }
+
+    private fun renderDiagnostics(sub: SubscriptionInfo) {
+        contentContainer.addView(TextView(this).apply {
+            text = "VoLTE Diagnostics"
+            textSize = 18f
+            setTypeface(null, Typeface.BOLD)
+            setPadding(0, 48, 0, 8)
+        })
+
+        val section = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        contentContainer.addView(section)
+
+        ImsDiagnostics.runChecks(this, sub).forEach { section.addView(checkView(it)) }
+
+        val imsRow = checkView(
+            ImsDiagnostics.Check(ImsDiagnostics.Level.INFO, "IMS registration", "Querying…")
+        )
+        section.addView(imsRow)
+        ImsDiagnostics.checkImsRegistration(this, sub.subscriptionId) { result ->
+            val index = section.indexOfChild(imsRow)
+            if (index >= 0) {
+                section.removeViewAt(index)
+                section.addView(checkView(result), index)
+            }
+        }
+
+        contentContainer.addView(Button(this).apply {
+            text = "Refresh Diagnostics"
+            setOnClickListener { renderUi() }
+        })
+        contentContainer.addView(TextView(this).apply {
+            text = "Config changes reload asynchronously; refresh a few seconds after changing an override."
+            textSize = 12f
+        })
+    }
+
+    private fun checkView(check: ImsDiagnostics.Check) = TextView(this).apply {
+        text = "${check.level.symbol}  ${check.title}\n     ${check.detail}"
+        textSize = 13f
+        setTextColor(check.level.color)
+        setPadding(0, 8, 0, 8)
     }
 
     @Suppress("DEPRECATION")
