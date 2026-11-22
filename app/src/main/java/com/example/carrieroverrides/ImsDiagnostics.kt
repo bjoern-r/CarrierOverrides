@@ -8,8 +8,11 @@ import android.telephony.CarrierConfigManager
 import android.telephony.NetworkRegistrationInfo
 import android.telephony.SubscriptionInfo
 import android.telephony.TelephonyManager
+import android.telephony.ims.ImsException
 import android.telephony.ims.ImsManager
 import android.telephony.ims.ImsMmTelManager
+import android.telephony.ims.ImsReasonInfo
+import android.telephony.ims.ImsRegistrationAttributes
 import android.telephony.ims.RegistrationManager
 
 /**
@@ -56,36 +59,71 @@ object ImsDiagnostics {
         return checks
     }
 
-    /** IMS registration is only exposed asynchronously; [onResult] runs on the main thread. */
+    /**
+     * IMS registration state; [onResult] runs once on the main thread.
+     *
+     * getRegistrationState() is documented as carrier-privilege accessible, but Android 14
+     * enforces READ_PRIVILEGED_PHONE_STATE (system only) for it. registerImsRegistrationCallback()
+     * accepts carrier privileges, reports the current state immediately on registration and,
+     * when unregistered, also delivers the reason.
+     */
     @SuppressLint("MissingPermission") // covered by carrier privileges
     fun checkImsRegistration(context: Context, subId: Int, onResult: (Check) -> Unit) {
         val title = "IMS registration"
-        try {
-            val mmTel = mmTelManager(context, subId)
-            val executor = context.mainExecutor
-            mmTel.getRegistrationState(executor) { state: Int ->
-                when (state) {
-                    RegistrationManager.REGISTRATION_STATE_REGISTERED ->
-                        mmTel.getRegistrationTransportType(executor) { transport: Int ->
-                            val via = when (transport) {
-                                AccessNetworkConstants.TRANSPORT_TYPE_WWAN -> "mobile network (VoLTE/VoNR)"
-                                AccessNetworkConstants.TRANSPORT_TYPE_WLAN -> "Wi-Fi (VoWiFi)"
-                                else -> "unknown transport"
-                            }
-                            onResult(Check(Level.OK, title, "Registered via $via."))
-                        }
-                    RegistrationManager.REGISTRATION_STATE_REGISTERING ->
-                        onResult(Check(Level.WARN, title, "Registering… refresh in a few seconds."))
-                    else ->
-                        onResult(
-                            Check(
-                                Level.FAIL, title,
-                                "Not registered. Fix the items marked ✘/! above; if all pass, " +
-                                    "the network's IMS core or the modem's IMS profile is the limit."
-                            )
-                        )
+        val mmTel = try {
+            mmTelManager(context, subId)
+        } catch (e: Exception) {
+            onResult(Check(Level.WARN, title, "Unavailable: ${e.javaClass.simpleName}"))
+            return
+        }
+
+        val callback = object : RegistrationManager.RegistrationCallback() {
+            private var done = false
+
+            private fun report(check: Check) {
+                if (done) return
+                done = true
+                try {
+                    mmTel.unregisterImsRegistrationCallback(this)
+                } catch (_: Exception) {
                 }
+                onResult(check)
             }
+
+            override fun onRegistered(attributes: ImsRegistrationAttributes) {
+                val via = when (attributes.transportType) {
+                    AccessNetworkConstants.TRANSPORT_TYPE_WWAN -> "mobile network (VoLTE/VoNR)"
+                    AccessNetworkConstants.TRANSPORT_TYPE_WLAN -> "Wi-Fi (VoWiFi)"
+                    else -> "unknown transport"
+                }
+                report(Check(Level.OK, title, "Registered via $via."))
+            }
+
+            override fun onRegistering(attributes: ImsRegistrationAttributes) {
+                report(Check(Level.WARN, title, "Registering\u2026 refresh in a few seconds."))
+            }
+
+            override fun onUnregistered(info: ImsReasonInfo) {
+                val reason = buildString {
+                    append("code ${info.code}")
+                    if (info.extraCode != 0) append(", extra ${info.extraCode}")
+                    info.extraMessage?.takeIf { it.isNotBlank() }?.let { append(": $it") }
+                }
+                report(
+                    Check(
+                        Level.FAIL, title,
+                        "Not registered ($reason). Fix the items marked \u2718/! above; if all " +
+                            "pass, the network's IMS core or the modem's IMS profile is the limit."
+                    )
+                )
+            }
+        }
+
+        try {
+            mmTel.registerImsRegistrationCallback(context.mainExecutor, callback)
+        } catch (e: ImsException) {
+            // Thrown when the IMS service is not available for this subscription (yet).
+            onResult(Check(Level.FAIL, title, "IMS service not available for this SIM (code ${e.code})."))
         } catch (e: Exception) {
             onResult(Check(Level.WARN, title, "Unavailable: ${e.javaClass.simpleName}: ${e.message}"))
         }
