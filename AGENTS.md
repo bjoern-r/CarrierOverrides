@@ -15,6 +15,8 @@ CarrierOverrides/
 ├── settings.gradle.kts              # Gradle module setup (:app)
 ├── build.gradle.kts                 # Root Android Gradle Plugin (8.7.2) & Kotlin (2.0.21)
 ├── gradle.properties                # JVM & AndroidX flags
+├── docker-build.sh                  # Hermetic build wrapper (runs Gradle in Docker)
+├── docker/Dockerfile                # Build image: Gradle 8.9 + JDK 17 + Android SDK 35
 └── app/
     ├── build.gradle.kts             # App module configuration (compileSdk 35, minSdk 33, JVM 17)
     ├── proguard-rules.pro           # ProGuard rules
@@ -30,6 +32,7 @@ CarrierOverrides/
 ---
 
 ## 3. Build, Lint & Verification Commands
+* **Build in Docker (no host toolchain needed):** `./docker-build.sh [tasks...]` (default `assembleDebug`, e.g. `./docker-build.sh assembleDebug lintDebug`)
 * **Build Debug APK:** `./gradlew assembleDebug` (or `gradle assembleDebug` if wrapper JAR is absent)
 * **Build Release APK:** `./gradlew assembleRelease`
 * **Run Android Lint:** `./gradlew lintDebug`
